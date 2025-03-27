@@ -3,6 +3,7 @@ from login import login
 from api import submit_logbook, get_logbook_months, get_logbook_entries, is_date_filled
 from config import get_credentials
 from datetime import datetime
+from csv_parser import parse_csv_file, import_from_csv
 
 def get_user_input():
     while True:
@@ -23,16 +24,26 @@ def get_user_input():
             year = current_date.year
             month = current_date.month
             
-            print("Clock in (0-24):")
-            clock_in = int(input())
-            if not 0 <= clock_in <= 24:
-                print("Clock in must be between 0 and 24")
+            print("Clock in time (24-hour format, e.g. 09:00):")
+            clock_in = input().strip()
+            if not (len(clock_in) == 5 and clock_in[2] == ':' and 
+                    clock_in[:2].isdigit() and clock_in[3:].isdigit() and
+                    0 <= int(clock_in[:2]) <= 23 and 0 <= int(clock_in[3:]) <= 59):
+                print("Clock in must be in format HH:MM (24-hour)")
                 continue
                 
-            print("Clock out (0-24):")
-            clock_out = int(input())
-            if not 0 <= clock_out <= 24 or clock_out <= clock_in:
-                print("Clock out must be between 0 and 24 and greater than clock in")
+            print("Clock out time (24-hour format, e.g. 18:00):")
+            clock_out = input().strip()
+            if not (len(clock_out) == 5 and clock_out[2] == ':' and 
+                    clock_out[:2].isdigit() and clock_out[3:].isdigit() and
+                    0 <= int(clock_out[:2]) <= 23 and 0 <= int(clock_out[3:]) <= 59):
+                print("Clock out must be in format HH:MM (24-hour)")
+                continue
+                
+            clock_in_hour, clock_in_min = map(int, clock_in.split(':'))
+            clock_out_hour, clock_out_min = map(int, clock_out.split(':'))
+            if (clock_out_hour < clock_in_hour) or (clock_out_hour == clock_in_hour and clock_out_min <= clock_in_min):
+                print("Clock out time must be later than clock in time")
                 continue
                 
             print("Activity: ")
@@ -46,9 +57,9 @@ def get_user_input():
             if not description:
                 print("Description cannot be empty")
                 continue
-                
-            clock_in_str = f"{clock_in % 12 or 12}:00 {'am' if clock_in < 12 else 'pm'}"
-            clock_out_str = f"{clock_out % 12 or 12}:00 {'am' if clock_out < 12 else 'pm'}"
+            
+            clock_in_str = clock_in
+            clock_out_str = clock_out
             
             return {
                 'start_date': start,
@@ -63,6 +74,40 @@ def get_user_input():
         except ValueError:
             print("Please enter valid numbers for dates and times")
 
+def process_single_day(date, activity, clock_in, clock_out, description, existing_entries):
+    date_obj = datetime.strptime(date, '%Y-%m-%d')
+    weekday = date_obj.weekday()
+    
+    if weekday == 6:  # Sunday
+        print(f"Skipping Sunday: {date}")
+        return
+    
+    if is_date_filled(existing_entries, date):
+        print(f"Entry already exists for {date}, skipping...")
+        return
+        
+    print(f"Submitting logbook for date: {date}")
+    
+    if weekday == 5:  # Saturday
+        print(f"Saturday detected - submitting as OFF day")
+        response = submit_logbook(
+            date=date,
+            activity="OFF",
+            clock_in="OFF",
+            clock_out="OFF",
+            description="OFF"
+        )
+    else:
+        response = submit_logbook(
+            date=date,
+            activity=activity,
+            clock_in=clock_in,
+            clock_out=clock_out,
+            description=description
+        )
+    
+    print(f"Logbook submission response: {response}")
+
 if __name__ == "__main__":
     cookies = load_cookies()
     if not cookies:
@@ -72,61 +117,98 @@ if __name__ == "__main__":
     else:
         print("Using existing cookies...")
     
-    user_input = get_user_input()
+    print("Choose input method:")
+    print("1. Manual input (single activity for multiple days)")
+    print("2. Import from CSV (different activities for different days)")
     
-    month_mapping = get_logbook_months()
-    current_month = user_input['month']
+    option = input().strip()
     
-    if current_month in month_mapping:
-        logbook_header_id = month_mapping[current_month]
-        print(f"Using LogBookHeaderID {logbook_header_id} for month {current_month}")
+    if option == "1":
+        user_input = get_user_input()
         
-        existing_entries = get_logbook_entries(logbook_header_id)
-        if "error" in existing_entries:
-            print(f"Error fetching existing entries: {existing_entries['error']}")
-            exit(1)
-    else:
-        print(f"No LogBookHeaderID found for month {current_month}. Cannot proceed.")
-        exit(1)
-    
-    dates = []
-    for day in range(user_input['start_date'], user_input['end_date'] + 1):
-        try:
-            date_obj = datetime(user_input['year'], user_input['month'], day)
-            dates.append(date_obj.strftime('%Y-%m-%d'))
-        except ValueError:
-            print(f"Invalid date: {user_input['year']}-{user_input['month']}-{day}, skipping...")
-    
-    for target_date in dates:
-        date_obj = datetime.strptime(target_date, '%Y-%m-%d')
-        weekday = date_obj.weekday()
+        month_mapping = get_logbook_months()
+        current_month = user_input['month']
         
-        if weekday == 6:
-            print(f"Skipping Sunday: {target_date}")
-            continue
-        
-        if is_date_filled(existing_entries, target_date):
-            print(f"Entry already exists for {target_date}, skipping...")
-            continue
+        if current_month in month_mapping:
+            logbook_header_id = month_mapping[current_month]
+            print(f"Using LogBookHeaderID {logbook_header_id} for month {current_month}")
             
-        print(f"Submitting logbook for date: {target_date}")
-        
-        if weekday == 5:
-            print(f"Saturday detected - submitting as OFF day")
-            response = submit_logbook(
-                date=target_date,
-                activity="OFF",
-                clock_in="OFF",
-                clock_out="OFF",
-                description="OFF"
-            )
+            existing_entries = get_logbook_entries(logbook_header_id)
+            if "error" in existing_entries:
+                print(f"Error fetching existing entries: {existing_entries['error']}")
+                exit(1)
         else:
-            response = submit_logbook(
+            print(f"No LogBookHeaderID found for month {current_month}. Cannot proceed.")
+            exit(1)
+        
+        dates = []
+        sundays = []
+        for day in range(user_input['start_date'], user_input['end_date'] + 1):
+            try:
+                date_obj = datetime(user_input['year'], user_input['month'], day)
+                date_str = date_obj.strftime('%Y-%m-%d')
+                
+                if date_obj.weekday() == 6:
+                    sundays.append(date_str)
+                else:
+                    dates.append(date_str)
+            except ValueError:
+                print(f"Invalid date: {user_input['year']}-{user_input['month']}-{day}, skipping...")
+        
+        if sundays:
+            print("\nNote: The following Sundays in your date range will be skipped:")
+            for sunday in sundays:
+                print(f"  - {sunday}")
+            print("")
+        
+        for target_date in dates:
+            process_single_day(
                 date=target_date,
                 activity=user_input['activity'],
                 clock_in=user_input['clock_in'],
                 clock_out=user_input['clock_out'],
-                description=user_input['description']
+                description=user_input['description'],
+                existing_entries=existing_entries
             )
+            
+    elif option == "2":
+        csv_entries = import_from_csv()
+        if not csv_entries:
+            print("No valid entries found in CSV. Exiting.")
+            exit(1)
         
-        print(f"Logbook submission response: {response}")
+        entries_by_month = {}
+        for entry in csv_entries:
+            date_obj = datetime.strptime(entry['date'], '%Y-%m-%d')
+            month = date_obj.month
+            year = date_obj.year
+            month_key = (year, month)
+            if month_key not in entries_by_month:
+                entries_by_month[month_key] = []
+            entries_by_month[month_key].append(entry)
+        
+        month_mapping = get_logbook_months()
+        
+        for (year, month), entries in entries_by_month.items():
+            if month in month_mapping:
+                logbook_header_id = month_mapping[month]
+                print(f"Using LogBookHeaderID {logbook_header_id} for month {month}/{year}")
+                
+                existing_entries = get_logbook_entries(logbook_header_id)
+                if "error" in existing_entries:
+                    print(f"Error fetching existing entries for month {month}/{year}: {existing_entries['error']}")
+                    continue
+                
+                for entry in entries:
+                    process_single_day(
+                        date=entry['date'],
+                        activity=entry['activity'],
+                        clock_in=entry['clock_in'],
+                        clock_out=entry['clock_out'],
+                        description=entry['description'],
+                        existing_entries=existing_entries
+                    )
+            else:
+                print(f"No LogBookHeaderID found for month {month}/{year}. Skipping entries for this month.")
+    else:
+        print("Invalid option. Please choose 1 or 2.")

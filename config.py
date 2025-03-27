@@ -5,8 +5,8 @@ import getpass
 load_dotenv()
 
 def get_credentials():
-    username = os.getenv("USERNAME")
-    password = os.getenv("PASSWORD")
+    username = os.getenv("USER_EMAIL_NLG")
+    password = os.getenv("USER_PASSWORD_NLG")
     
     if not username:
         username = input("Enter email: ")
