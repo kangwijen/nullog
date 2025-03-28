@@ -2,6 +2,8 @@ import requests
 from cookies import load_cookies
 import json
 from datetime import datetime
+from login import login
+from config import get_credentials
 
 def get_logbook_months(logbook_id=""):
     cookies_data = load_cookies()
@@ -26,6 +28,12 @@ def get_logbook_months(logbook_id=""):
             return month_mapping
         else:
             raise ValueError(f"Unexpected response format: {data}")
+    elif response.status_code == 403:
+        print("Session expired. Logging in again.")
+        username, password = get_credentials()
+        login(username=username, password=password)
+        cookies = load_cookies()
+        return get_logbook_months()
     else:
         raise ValueError(f"API request failed with status code {response.status_code}")
 
