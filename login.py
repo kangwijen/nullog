@@ -4,24 +4,46 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.service import Service
-import pickle
-import os
+import undetected_chromedriver as uc
 import time
 import getpass
 from webdriver_manager.chrome import ChromeDriverManager
+from utils import save_data_to_pickle
+from constants import (
+    LOGIN_URL, XPATH_MS_LOGIN_BTN, XPATH_EMAIL_INPUT, XPATH_NEXT_BUTTON,
+    XPATH_PASSWORD_INPUT, XPATH_SIGN_IN_BUTTON, XPATH_ENRICHMENT_DASHBOARD,
+    XPATH_INTERNSHIP_SECTION, XPATH_LOGBOOK_NAV
+)
+from display import print_info, print_error, print_success, print_warning
+
+def setup_driver():
+    driver_path = ChromeDriverManager().install()
+    options = uc.ChromeOptions()
+    driver = uc.Chrome(driver_executable_path=driver_path, options=options)
+    return driver
+
+def navigate_to_page(driver, url, message="Navigating to page..."):
+    print_info(message)
+    driver.get(url)
+    
+def wait_for_element(driver, xpath, timeout=10, clickable=False):
+    wait = WebDriverWait(driver, timeout)
+    if clickable:
+        return wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+    else:
+        return wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
 
 def login(username=None, password=None):
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service)
+    driver = setup_driver()
     
     try:
-        print("Navigating to login page...")
-        driver.get("https://enrichment.apps.binus.ac.id/Login/Student/Login")
+        navigate_to_page(driver, LOGIN_URL, "Navigating to login page...")
         
-        print("Clicking Microsoft login button...")
-        microsoft_login = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//*[@id="btnLogin"]'))
-        )
+        user_agent = driver.execute_script("return navigator.userAgent;")
+        print_info(f"Detected User-Agent: {user_agent}")
+        
+        print_info("Clicking Microsoft login button...")
+        microsoft_login = wait_for_element(driver, XPATH_MS_LOGIN_BTN)
         microsoft_login.click()
         
         if not username:
@@ -29,85 +51,63 @@ def login(username=None, password=None):
         if not password:
             password = getpass.getpass("Enter your password: ")
         
-        print("Entering email...")
-        email_input = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//*[@id="i0116"]'))
-        )
+        print_info("Entering email...")
+        email_input = wait_for_element(driver, XPATH_EMAIL_INPUT)
         email_input.send_keys(username)
         
-        next_button = driver.find_element(By.XPATH, '//*[@id="idSIButton9"]')
+        next_button = driver.find_element(By.XPATH, XPATH_NEXT_BUTTON)
         next_button.click()
         
-        print("Entering password...")
-        password_input = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//*[@id="i0118"]'))
-        )
+        print_info("Entering password...")
+        password_input = wait_for_element(driver, XPATH_PASSWORD_INPUT)
         password_input.send_keys(password)
         time.sleep(2)
         
-        print("Clicking sign in...")
-        signin = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '//*[@id="idSIButton9"]'))
-        )
+        print_info("Clicking sign in...")
+        signin = wait_for_element(driver, XPATH_SIGN_IN_BUTTON, clickable=True)
         driver.execute_script("arguments[0].scrollIntoView(true);", signin)
         time.sleep(1)
         signin.click()
         
-        print("Handling 'Stay signed in' prompt...")
+        print_info("Handling 'Stay signed in' prompt...")
         try:
-            verify = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, '//*[@id="idSIButton9"]'))
-            )
+            verify = wait_for_element(driver, XPATH_SIGN_IN_BUTTON, clickable=True)
             verify.click()
         except TimeoutException:
-            print("No 'Stay signed in' prompt detected.")
+            print_info("No 'Stay signed in' prompt detected.")
         
-        print("Navigating to Enrichment Dashboard...")
+        print_info("Navigating to Enrichment Dashboard...")
         try:
-            enrichment = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.XPATH, '//*[@id="StudentTermDashboard"]/span[1]/a[2]'))
-            )
+            enrichment = wait_for_element(driver, XPATH_ENRICHMENT_DASHBOARD, timeout=20)
             enrichment.click()
         except TimeoutException:
-            print("Enrichment dashboard navigation element not found. May already be on the right page.")
+            print_warning("Enrichment dashboard navigation element not found. May already be on the right page.")
         
-        print("Navigating to Internship section...")
+        print_info("Navigating to Internship section...")
         try:
-            login_internship = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, '//*[@id="tilesHolder"]/div[1]/div/div[1]/div/div[2]/div[1]'))
-            )
+            login_internship = wait_for_element(driver, XPATH_INTERNSHIP_SECTION)
             login_internship.click()
         except TimeoutException:
-            print("Internship section not found. May already be on the right page.")
+            print_warning("Internship section not found. May already be on the right page.")
         
-        print("Navigating to Logbook...")
+        print_info("Navigating to Logbook...")
         try:
             time.sleep(2)
-            logbook = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, '//*[@id="main-content"]/div[1]/div/div/ul/li[2]'))
-            )
+            logbook = wait_for_element(driver, XPATH_LOGBOOK_NAV)
             logbook.click()
             time.sleep(2)
         except TimeoutException:
-            print("Logbook navigation element not found.")
+            print_warning("Logbook navigation element not found.")
         
-        print("Successfully navigated to the logbook!")
+        print_success("Successfully navigated to the logbook!")
         
         cookies = driver.get_cookies()
-        
-        cookies_dir = os.path.join(os.path.dirname(__file__), "cookies")
-        os.makedirs(cookies_dir, exist_ok=True)
-        cookies_file = os.path.join(cookies_dir, "binus_cookies.pkl")
-        
-        with open(cookies_file, "wb") as f:
-            pickle.dump(cookies, f)
-        
-        print(f"Cookies saved to {cookies_file}")
+        save_data_to_pickle({"cookies": cookies, "user_agent": user_agent})
         
         return cookies
         
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print_error(f"An error occurred during login: {e}")
         return None
     finally:
         time.sleep(3)
