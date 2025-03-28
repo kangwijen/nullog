@@ -90,7 +90,7 @@ def get_user_input():
                 print_error("Description cannot be empty")
                 continue
             
-            print_info("Force overwrite existing entries? (y/n):")
+            print_info("Do you want to force overwrite all existing entries? (y/n):")
             force_overwrite = input().strip().lower() == 'y'
             
             return {
