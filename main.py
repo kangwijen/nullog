@@ -3,15 +3,24 @@ from login import login
 from api import submit_logbook, get_logbook_months, get_logbook_entries, is_date_filled
 from config import get_credentials
 from datetime import datetime
-from csv_parser import parse_csv_file, import_from_csv
+from csv_parser import import_from_csv
 
 def get_user_input():
     while True:
         try:
+            current_date = datetime.now()
+            year = current_date.year
+            month = current_date.month
+            current_day = current_date.day
+            
             print("Start date (1-31):")
             start = int(input())
             if not 1 <= start <= 31:
                 print("Start date must be between 1 and 31")
+                continue
+            
+            if year == current_date.year and month == current_date.month and start > current_day:
+                print("Start date cannot be in the future")
                 continue
                 
             print("End Date (1-31):")
@@ -19,32 +28,33 @@ def get_user_input():
             if not 1 <= end <= 31 or end < start:
                 print("End date must be between 1 and 31 and greater than or equal to start date")
                 continue
-                
-            current_date = datetime.now()
-            year = current_date.year
-            month = current_date.month
             
-            print("Clock in time (24-hour format, e.g. 09:00):")
+            if year == current_date.year and month == current_date.month and end > current_day:
+                print("End date cannot be in the future")
+                continue
+            
+            print("Clock in time (24-hour format, e.g. 09:00 or OFF):")
             clock_in = input().strip()
-            if not (len(clock_in) == 5 and clock_in[2] == ':' and 
+            if clock_in != "OFF" and not (len(clock_in) == 5 and clock_in[2] == ':' and 
                     clock_in[:2].isdigit() and clock_in[3:].isdigit() and
                     0 <= int(clock_in[:2]) <= 23 and 0 <= int(clock_in[3:]) <= 59):
-                print("Clock in must be in format HH:MM (24-hour)")
+                print("Clock in must be in format HH:MM (24-hour) or OFF")
                 continue
                 
-            print("Clock out time (24-hour format, e.g. 18:00):")
+            print("Clock out time (24-hour format, e.g. 18:00 or OFF):")
             clock_out = input().strip()
-            if not (len(clock_out) == 5 and clock_out[2] == ':' and 
+            if clock_out != "OFF" and not (len(clock_out) == 5 and clock_out[2] == ':' and 
                     clock_out[:2].isdigit() and clock_out[3:].isdigit() and
                     0 <= int(clock_out[:2]) <= 23 and 0 <= int(clock_out[3:]) <= 59):
-                print("Clock out must be in format HH:MM (24-hour)")
+                print("Clock out must be in format HH:MM (24-hour) or OFF")
                 continue
-                
-            clock_in_hour, clock_in_min = map(int, clock_in.split(':'))
-            clock_out_hour, clock_out_min = map(int, clock_out.split(':'))
-            if (clock_out_hour < clock_in_hour) or (clock_out_hour == clock_in_hour and clock_out_min <= clock_in_min):
-                print("Clock out time must be later than clock in time")
-                continue
+            
+            if clock_in != "OFF" and clock_out != "OFF":
+                clock_in_hour, clock_in_min = map(int, clock_in.split(':'))
+                clock_out_hour, clock_out_min = map(int, clock_out.split(':'))
+                if (clock_out_hour < clock_in_hour) or (clock_out_hour == clock_in_hour and clock_out_min <= clock_in_min):
+                    print("Clock out time must be later than clock in time")
+                    continue
                 
             print("Activity: ")
             activity = input()
@@ -78,7 +88,7 @@ def process_single_day(date, activity, clock_in, clock_out, description, existin
     date_obj = datetime.strptime(date, '%Y-%m-%d')
     weekday = date_obj.weekday()
     
-    if weekday == 6:  # Sunday
+    if weekday == 6:
         print(f"Skipping Sunday: {date}")
         return
     
@@ -88,7 +98,7 @@ def process_single_day(date, activity, clock_in, clock_out, description, existin
         
     print(f"Submitting logbook for date: {date}")
     
-    if weekday == 5:  # Saturday
+    if weekday == 5:
         print(f"Saturday detected - submitting as OFF day")
         response = submit_logbook(
             date=date,
