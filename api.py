@@ -21,7 +21,7 @@ def prepare_request_params():
     
     return cookies, user_agent
 
-def make_api_request(method, url, headers=None, data=None, params=None):
+def make_api_request(method, url, headers=None, data=None, params=None, retry_on_403=True):
     try:
         cookies, user_agent = prepare_request_params()
         
@@ -41,11 +41,11 @@ def make_api_request(method, url, headers=None, data=None, params=None):
         else:
             response = requests.get(url, cookies=cookies, headers=headers, params=params)
         
-        if response.status_code == 403:
+        if response.status_code == 403 and retry_on_403:
             print_warning("Session expired. Logging in again.")
             username, password = get_credentials()
             login(username=username, password=password)
-            return make_api_request(method, url, headers, data, params)
+            return make_api_request(method, url, headers, data, params, retry_on_403=False)
         
         return response
     except Exception as e:
@@ -58,12 +58,66 @@ def get_logbook_months(logbook_id=""):
     if response.status_code == 200:
         data = response.json()
         if 'data' in data:
-            month_mapping = {item['monthInt']: item['logBookHeaderID'] for item in data['data']}
-            return month_mapping
+            months_data = {}
+            current_year = datetime.now().year
+            
+            for item in data['data']:
+                year = item.get('year') or current_year
+                
+                months_data[item['monthInt']] = {
+                    'logBookHeaderID': item['logBookHeaderID'],
+                    'name': item['month'],
+                    'isCurrentMonth': item['isCurrentMonth'],
+                    'countData': item['countData'],
+                    'isWarning': item['isWarning'],
+                    'year': year
+                }
+            return months_data
         else:
             raise ValueError(f"Unexpected response format: {data}")
     else:
         raise ValueError(f"API request failed with status code {response.status_code}")
+
+def check_month_completion_status(months_data):
+    completion_status = {}
+    
+    for month, month_info in months_data.items():
+        logbook_header_id = month_info['logBookHeaderID']
+        entries_data = get_logbook_entries(logbook_header_id)
+        
+        if isinstance(entries_data, dict) and not entries_data.get("error"):
+            filled_empty = entries_data.get("filledEmpty", 0)
+            filled = entries_data.get("filled", 0)
+            filled_submit = entries_data.get("filledSubmit", 0)
+            
+            completion_status[month] = {
+                'completed': filled_empty == 0 and filled > 0 and filled_submit == filled,
+                'empty_entries': filled_empty,
+                'filled_entries': filled,
+                'submitted_entries': filled_submit,
+                'month_name': month_info['name'],
+                'year': month_info['year'],
+                'header_id': logbook_header_id
+            }
+    
+    return completion_status
+
+def is_month_available_for_submission(month, year, completion_status):
+    prev_month = month - 1
+    prev_year = year
+    
+    if prev_month == 0:
+        prev_month = 12
+        prev_year -= 1
+    
+    if prev_month in completion_status:
+        if not completion_status[prev_month]['completed']:
+            return False, f"Previous month ({completion_status[prev_month]['month_name']} {prev_year}) has unfilled or unsubmitted entries."
+    
+    if month not in completion_status:
+        return False, f"Month {month} of {year} is not available in the logbook system."
+    
+    return True, None
 
 def get_logbook_entries(logbook_header_id):
     payload = {'logBookHeaderID': logbook_header_id}
@@ -96,6 +150,47 @@ def get_entry_for_date(entries_data, target_date):
 def is_date_filled(entries_data, target_date):
     return get_entry_for_date(entries_data, target_date) is not None
 
+def is_previous_month_completed(current_month, current_year):
+    previous_month = current_month - 1
+    previous_year = current_year
+    
+    if previous_month == 0:
+        previous_month = 12
+        previous_year -= 1
+    
+    months_data = get_logbook_months()
+    
+    if previous_month not in months_data:
+        print_info(f"No logbook data found for previous month ({previous_month}/{previous_year}).")
+        return True, None
+    
+    logbook_header_id = months_data[previous_month]['logBookHeaderID']
+    entries_data = get_logbook_entries(logbook_header_id)
+    
+    if not entries_data or not isinstance(entries_data, dict) or "error" in entries_data:
+        print_warning(f"Could not retrieve data for previous month ({previous_month}/{previous_year}).")
+        return True, None
+    
+    filled_empty = entries_data.get("filledEmpty", 0)
+    filled = entries_data.get("filled", 0)
+    filled_submit = entries_data.get("filledSubmit", 0)
+    
+    print_info(f"Previous month status: {filled_empty} unfilled, {filled} filled, {filled_submit} submitted")
+    
+    month_completed = filled_empty == 0 and filled > 0 and filled_submit == filled
+    
+    if not month_completed and filled_empty > 0:
+        message = (f"Previous month ({previous_month}/{previous_year}) has {filled_empty} "
+                  f"unfilled entries. Please complete them first.")
+        return False, message
+    
+    if not month_completed and filled_submit < filled:
+        message = (f"Previous month ({previous_month}/{previous_year}) has {filled - filled_submit} "
+                  f"entries that are filled but not submitted. Please submit them first.")
+        return False, message
+    
+    return True, None
+
 def submit_logbook(date, activity, clock_in, clock_out, description, force=False):
     if isinstance(date, str):
         date_obj = datetime.strptime(date, '%Y-%m-%d')
@@ -108,10 +203,21 @@ def submit_logbook(date, activity, clock_in, clock_out, description, force=False
     clock_in_12hr = convert_12hour(clock_in)
     clock_out_12hr = convert_12hour(clock_out)
     month = date_obj.month
+    year = date_obj.year
     
-    month_mapping = get_logbook_months()
-    if month in month_mapping:
-        logbook_header_id = month_mapping[month]
+    is_complete, message = is_previous_month_completed(month, year)
+    if not is_complete:
+        raise ValueError(message)
+    
+    months_data = get_logbook_months()
+    completion_status = check_month_completion_status(months_data)
+    available, message = is_month_available_for_submission(month, year, completion_status)
+    
+    if not available:
+        raise ValueError(message)
+    
+    if month in months_data:
+        logbook_header_id = months_data[month]['logBookHeaderID']
         print_info(f"Using LogBookHeaderID {logbook_header_id} for month {month}")
     else:
         raise ValueError(f"No LogBookHeaderID found for month {month}. Cannot proceed.")

@@ -75,3 +75,36 @@ def display_csv_entries(entries):
         ["Date", "Activity", "Clock In", "Clock Out", "Description"],
         "CSV Entries to Submit"
     )
+
+def display_available_months(completion_status):
+    table_data = []
+    prev_complete = True
+    
+    for month, status in sorted(completion_status.items()):
+        completion_indicator = "✓" if status['completed'] else "✗"
+        color = Fore.GREEN if status['completed'] else Fore.RED
+        
+        empty_status = f"{status['empty_entries']} unfilled" if status['empty_entries'] > 0 else "All filled"
+        submit_status = f"{status['submitted_entries']}/{status['filled_entries']} submitted"
+        
+        blocked = not prev_complete
+        availability = "Available" if prev_complete else "BLOCKED - Complete previous month first"
+        avail_color = Fore.GREEN if prev_complete else Fore.RED
+        
+        table_data.append([
+            month,
+            status['month_name'],
+            status['year'],
+            f"{color}{completion_indicator}{Style.RESET_ALL}",
+            empty_status,
+            submit_status,
+            f"{avail_color}{availability}{Style.RESET_ALL}"
+        ])
+        
+        prev_complete = status['completed']
+    
+    print_table(
+        table_data,
+        ["Month #", "Month", "Year", "Complete", "Fill Status", "Submit Status", "Availability"],
+        "Available Months in Logbook"
+    )
