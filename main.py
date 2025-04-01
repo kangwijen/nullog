@@ -131,58 +131,67 @@ def generate_date_range(start_date, end_date, year, month):
     return dates, sundays
 
 def process_single_day(date, activity, clock_in, clock_out, description, existing_entries, force_overwrite=False):
-    date_obj = datetime.strptime(date, '%Y-%m-%d')
-    weekday = date_obj.weekday()
-    
-    if weekday == WEEKDAY_SUNDAY:
-        print_warning(f"Skipping Sunday: {date}")
-        return
-    
-    existing_entry = get_entry_for_date(existing_entries, date)
-    if existing_entry:
-        print_info(f"Entry already exists for {date}:")
-        print_info(f"  Activity: {existing_entry['activity']}")
-        print_info(f"  Clock In: {existing_entry['clockIn']}")
-        print_info(f"  Clock Out: {existing_entry['clockOut']}")
-        print_info(f"  Description: {existing_entry['description']}")
-        
-        if not force_overwrite:
-            confirm = input(f"Do you want to overwrite this entry for {date}? (y/n): ").strip().lower()
-            if confirm != 'y':
-                print_warning(f"Skipping {date}...")
-                return
-            print_info(f"Confirmed overwriting entry for {date}")
-    
-    print_info(f"Submitting logbook for date: {date}")
-    
     try:
-        if weekday == WEEKDAY_SATURDAY:
-            print_warning(f"Saturday detected - submitting as OFF day")
-            response = submit_logbook(
-                date=date,
-                activity="OFF",
-                clock_in="OFF",
-                clock_out="OFF",
-                description="OFF",
-                force=True if existing_entry else force_overwrite
-            )
-        else:
-            response = submit_logbook(
-                date=date,
-                activity=activity,
-                clock_in=clock_in,
-                clock_out=clock_out,
-                description=description,
-                force=True if existing_entry else force_overwrite
-            )
+        date_obj = datetime.strptime(date, '%Y-%m-%d')
+        weekday = date_obj.weekday()
         
-        if "error" in response:
-            print_error(f"Logbook submission failed: {response['error']}")
-        else:
-            print_success(f"Logbook entry for {date} submitted successfully")
+        if weekday == WEEKDAY_SUNDAY:
+            print_warning(f"Skipping Sunday: {date}")
+            return
+        
+        existing_entry = get_entry_for_date(existing_entries, date)
+        if existing_entry:
+            print_info(f"Entry already exists for {date}:")
+            print_info(f"  Activity: {existing_entry['activity']}")
+            print_info(f"  Clock In: {existing_entry['clockIn']}")
+            print_info(f"  Clock Out: {existing_entry['clockOut']}")
+            print_info(f"  Description: {existing_entry['description']}")
+            
+            if not force_overwrite:
+                confirm = input(f"Do you want to overwrite this entry for {date}? (y/n): ").strip().lower()
+                if confirm != 'y':
+                    print_warning(f"Skipping {date}...")
+                    return
+                print_info(f"Confirmed overwriting entry for {date}")
+        
+        print_info(f"Submitting logbook for date: {date}")
+        
+        try:
+            if weekday == WEEKDAY_SATURDAY:
+                print_warning(f"Saturday detected - submitting as OFF day")
+                response = submit_logbook(
+                    date=date,
+                    activity="OFF",
+                    clock_in="OFF",
+                    clock_out="OFF",
+                    description="OFF",
+                    force=True if existing_entry else force_overwrite
+                )
+            else:
+                response = submit_logbook(
+                    date=date,
+                    activity=activity,
+                    clock_in=clock_in,
+                    clock_out=clock_out,
+                    description=description,
+                    force=True if existing_entry else force_overwrite
+                )
+            
+            if "error" in response:
+                print_error(f"Logbook submission failed: {response['error']}")
+                return False
+            else:
+                print_success(f"Logbook entry for {date} submitted successfully")
+                return True
+        except Exception as e:
+            print_error(f"Cannot submit entry for {date}: {str(e)}")
+            return False
     except ValueError as e:
-        print_error(f"Cannot submit entry for {date}: {str(e)}")
-        return
+        print_error(f"Invalid date format for {date}: {str(e)}")
+        return False
+    except Exception as e:
+        print_error(f"Unexpected error processing {date}: {str(e)}")
+        return False
 
 def group_entries_by_month(csv_entries):
     entries_by_month = {}
@@ -200,113 +209,147 @@ def group_entries_by_month(csv_entries):
     return entries_by_month
 
 def process_csv_input():
-    csv_entries = import_from_csv()
-    if not csv_entries:
-        print_error("No valid entries found in CSV. Exiting.")
-        return False
-    
-    display_csv_entries(csv_entries)
-    
-    months_data = get_logbook_months()
-    completion_status = check_month_completion_status(months_data)
-    
-    display_available_months(completion_status)
-    
-    entries_by_month = group_entries_by_month(csv_entries)
-    
-    unavailable_months = []
-    for (year, month) in entries_by_month.keys():
-        if month not in months_data:
-            month_name = datetime(year, month, 1).strftime('%B')
-            unavailable_months.append(f"{month_name} {year}")
-    
-    if unavailable_months:
-        print_error(f"The following months in your CSV are not available in the logbook system:")
-        for month in unavailable_months:
-            print_error(f"  - {month}")
-
-        print_error("Please check your CSV file and try again.")
+    try:
+        csv_entries = import_from_csv()
+        if not csv_entries:
+            print_error("No valid entries found in CSV. Exiting.")
+            return False
         
-        sys.exit(1)
-    
-    print_info("Do you want to force overwrite EXISTING entries without individual confirmation? (y/n):")
-    force_overwrite = input().strip().lower() == 'y'
-    
-    if force_overwrite:
-        print_warning("All existing entries will be overwritten without further confirmation!")
-        print_warning("Note: Previous month validation will still be enforced. You cannot submit to a month if previous months are incomplete.")
-    else:
-        print_info("You will be prompted for confirmation before overwriting each existing entry.")
-    
-    validated_entries = {}
-    
-    for (year, month), entries in entries_by_month.items():
-        if month not in months_data:
-            continue
+        display_csv_entries(csv_entries)
+        
+        try:
+            months_data = get_logbook_months()
+            if not months_data:
+                print_error("Failed to retrieve logbook months. Exiting.")
+                sys.exit(1)
+                
+            completion_status = check_month_completion_status(months_data)
             
-        available, message = is_month_available_for_submission(month, year, completion_status)
-        
-        if not available:
-            print_error(f"Cannot submit entries for {months_data[month]['name']} {year}: {message}")
-            print_error(f"Skipping entries for {months_data[month]['name']} {year}. Please complete previous months first.")
-        else:
-            validated_entries[(year, month)] = entries
-    
-    if not validated_entries:
-        print_error("No valid entries to submit after validation. Exiting.")
+            display_available_months(completion_status)
+            
+            entries_by_month = group_entries_by_month(csv_entries)
+            
+            unavailable_months = []
+            for (year, month) in entries_by_month.keys():
+                if month not in months_data:
+                    month_name = datetime(year, month, 1).strftime('%B')
+                    unavailable_months.append(f"{month_name} {year}")
+            
+            if unavailable_months:
+                print_error(f"The following months in your CSV are not available in the logbook system:")
+                for month in unavailable_months:
+                    print_error(f"  - {month}")
+                
+                print_error("Please check your CSV file and try again.")
+                return False
+            
+            print_info("Do you want to force overwrite EXISTING entries without individual confirmation? (y/n):")
+            force_overwrite = input().strip().lower() == 'y'
+            
+            if force_overwrite:
+                print_warning("All existing entries will be overwritten without further confirmation!")
+                print_warning("Note: Previous month validation will still be enforced. You cannot submit to a month if previous months are incomplete.")
+            else:
+                print_info("You will be prompted for confirmation before overwriting each existing entry.")
+            
+            validated_entries = {}
+            
+            for (year, month), entries in entries_by_month.items():
+                if month not in months_data:
+                    continue
+                    
+                available, message = is_month_available_for_submission(month, year, completion_status)
+                
+                if not available:
+                    print_error(f"Cannot submit entries for {months_data[month]['name']} {year}: {message}")
+                    print_error(f"Skipping entries for {months_data[month]['name']} {year}. Please complete previous months first.")
+                else:
+                    validated_entries[(year, month)] = entries
+            
+            if not validated_entries:
+                print_error("No valid entries to submit after validation. Exiting.")
+                return False
+            
+            success_count = 0
+            total_entries = sum(len(entries) for entries in validated_entries.values())
+            
+            for (year, month), entries in validated_entries.items():
+                logbook_header_id = months_data[month]['logBookHeaderID']
+                print_info(f"Using LogBookHeaderID {logbook_header_id} for {months_data[month]['name']} {year}")
+                
+                existing_entries = get_logbook_entries(logbook_header_id)
+                if "error" in existing_entries:
+                    print_error(f"Error fetching existing entries for {months_data[month]['name']} {year}: {existing_entries['error']}")
+                    continue
+                
+                for entry in entries:
+                    if process_single_day(
+                        date=entry['date'],
+                        activity=entry['activity'],
+                        clock_in=entry['clock_in'],
+                        clock_out=entry['clock_out'],
+                        description=entry['description'],
+                        existing_entries=existing_entries,
+                        force_overwrite=force_overwrite
+                    ):
+                        success_count += 1
+            
+            print_info(f"Successfully submitted {success_count} out of {total_entries} entries")
+            return success_count > 0
+            
+        except Exception as e:
+            print_error(f"An error occurred while processing CSV: {str(e)}")
+            return False
+    except KeyboardInterrupt:
+        print_warning("\nOperation cancelled by user.")
         return False
-    
-    for (year, month), entries in validated_entries.items():
-        logbook_header_id = months_data[month]['logBookHeaderID']
-        print_info(f"Using LogBookHeaderID {logbook_header_id} for {months_data[month]['name']} {year}")
-        
-        existing_entries = get_logbook_entries(logbook_header_id)
-        if "error" in existing_entries:
-            print_error(f"Error fetching existing entries for {months_data[month]['name']} {year}: {existing_entries['error']}")
-            continue
-        
-        for entry in entries:
-            process_single_day(
-                date=entry['date'],
-                activity=entry['activity'],
-                clock_in=entry['clock_in'],
-                clock_out=entry['clock_out'],
-                description=entry['description'],
-                existing_entries=existing_entries,
-                force_overwrite=force_overwrite
-            )
-    
-    return True
+    except Exception as e:
+        print_error(f"Unexpected error: {str(e)}")
+        return False
 
 def main():
-    print_header("nullog - Automated Logbook System")
-    print_header("DISCLAIMER")
-    print_info("This tool automates logbook entries and may modify existing data on your behalf.")
-    print_info("By using this tool, you acknowledge that:")
-    print_info("1. You take full responsibility for all entries submitted through this tool")
-    print_info("2. You have verified that all data to be submitted is accurate and complete")
-    print_info("3. You understand that existing entries may be overwritten without recovery")
-    print_info("4. This tool is provided as-is with no warranty or guarantees of any kind")
-    print_info("5. The developers are not responsible for any issues arising from its use")
-    
-    print_info("\nDo you accept these terms and wish to continue? (y/n):")
-    if input().strip().lower() != 'y':
-        print_warning("You must accept the disclaimer to use this tool. Exiting...")
-        sys.exit(1)
-    
-    cookies = load_cookies()
-    if not cookies:
-        print_info("No saved session found. Logging in...")
-        username, password = get_credentials()
-        login(username=username, password=password)
+    try:
+        print_header("nullog - Automated Logbook System")
+        print_header("DISCLAIMER")
+        print_info("This tool automates logbook entries and may modify existing data on your behalf.")
+        print_info("By using this tool, you acknowledge that:")
+        print_info("1. You take full responsibility for all entries submitted through this tool")
+        print_info("2. You have verified that all data to be submitted is accurate and complete")
+        print_info("3. You understand that existing entries may be overwritten without recovery")
+        print_info("4. This tool is provided as-is with no warranty or guarantees of any kind")
+        print_info("5. The developers are not responsible for any issues arising from its use")
+        
+        print_info("\nDo you accept these terms and wish to continue? (y/n):")
+        if input().strip().lower() != 'y':
+            print_warning("You must accept the disclaimer to use this tool. Exiting...")
+            sys.exit(0)
+        
         cookies = load_cookies()
         if not cookies:
-            print_error("Failed to log in. Please try again.")
-            return
-    else:
-        print_success("Using existing cookies...")
-    
-    process_csv_input()
+            print_info("No saved session found. Logging in...")
+            username, password = get_credentials()
+            login_result = login(username=username, password=password)
+            if not login_result:
+                print_error("Failed to log in. Please try again.")
+                sys.exit(1)
+            cookies = load_cookies()
+            if not cookies:
+                print_error("Failed to save login session. Exiting.")
+                sys.exit(1)
+        else:
+            print_success("Using existing cookies...")
+        
+        if not process_csv_input():
+            print_warning("Program completed with errors or no entries were processed.")
+            sys.exit(1)
+        
+        print_success("Program completed successfully!")
+    except KeyboardInterrupt:
+        print_warning("\nOperation cancelled by user.")
+        sys.exit(0)
+    except Exception as e:
+        print_error(f"Unexpected error: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

@@ -1,13 +1,21 @@
 import csv
 from datetime import datetime
 import os
+import sys
 from utils import is_valid_time_format
 from constants import WEEKDAY_SUNDAY
 from display import print_error, print_warning, print_info, print_success, display_csv_entries
 
 def validate_date(row_num, date_str):
+    if not date_str or not isinstance(date_str, str):
+        print_error(f"Empty or invalid date in row {row_num}")
+        return None, None
+        
     try:
         date = datetime.strptime(date_str, '%Y-%m-%d')
+        if date > datetime.now():
+            print_error(f"Future date '{date_str}' in row {row_num} is not allowed")
+            return None, None
         return date.strftime('%Y-%m-%d'), date.weekday()
     except ValueError:
         print_error(f"Invalid date format '{date_str}' in row {row_num}. Use YYYY-MM-DD format.")
@@ -30,24 +38,60 @@ def validate_time_fields(row_num, row):
     return True
 
 def parse_csv_file(filepath):
-    """Parse a CSV file with logbook entries."""
     entries = []
     sundays = []
+    row_count = 0
+    error_count = 0
+    processed_dates = set()
     
     try:
         with open(filepath, 'r') as file:
             reader = csv.DictReader(file)
+            
+            required_fields = ['date', 'activity', 'clock_in', 'clock_out', 'description']
+            header = reader.fieldnames
+            
+            if not header:
+                print_error("CSV file has no headers")
+                return None
+                
+            missing_headers = [f for f in required_fields if f not in header]
+            if missing_headers:
+                print_error(f"CSV file is missing required headers: {', '.join(missing_headers)}")
+                return None
+            
             for row_num, row in enumerate(reader, 2):
-                required_fields = ['date', 'activity', 'clock_in', 'clock_out', 'description']
+                row_count += 1
+                if error_count >= 5:
+                    print_error(f"Too many errors ({error_count}). Aborting CSV import.")
+                    return None
+                    
+                if all(not val.strip() if val else True for val in row.values()):
+                    continue
+                    
                 if not all(field in row for field in required_fields):
                     missing = [f for f in required_fields if f not in row]
                     print_error(f"Missing fields in CSV row {row_num}: {', '.join(missing)}")
-                    return None
+                    error_count += 1
+                    continue
+                
+                empty_fields = [f for f in required_fields if f in row and not row[f].strip()]
+                if empty_fields:
+                    print_error(f"Empty required fields in row {row_num}: {', '.join(empty_fields)}")
+                    error_count += 1
+                    continue
                 
                 formatted_date, weekday = validate_date(row_num, row['date'])
                 if formatted_date is None:
-                    return None
+                    error_count += 1
+                    continue
                     
+                if formatted_date in processed_dates:
+                    print_error(f"Duplicate date '{formatted_date}' in row {row_num}. Each date must be unique.")
+                    error_count += 1
+                    continue
+                
+                processed_dates.add(formatted_date)
                 row['date'] = formatted_date
                 
                 if weekday == WEEKDAY_SUNDAY:
@@ -55,12 +99,18 @@ def parse_csv_file(filepath):
                     continue
                 
                 if not validate_time_fields(row_num, row):
-                    return None
+                    error_count += 1
+                    continue
                 
                 entries.append(row)
         
         if not entries:
-            print_error("CSV file is empty or contains only Sunday entries")
+            if row_count == 0:
+                print_error("CSV file is empty")
+            elif len(sundays) == row_count:
+                print_error("CSV file contains only Sunday entries which will be skipped")
+            else:
+                print_error("No valid entries found in CSV file after validation")
             return None
         
         if sundays:
@@ -70,14 +120,27 @@ def parse_csv_file(filepath):
             print("")
             
         return entries
+    except FileNotFoundError:
+        print_error(f"File not found: {filepath}")
+        return None
+    except PermissionError:
+        print_error(f"Permission denied when accessing file: {filepath}")
+        return None
+    except csv.Error as e:
+        print_error(f"CSV parsing error: {e}")
+        return None
     except Exception as e:
-        print_error(f"Error reading CSV file: {e}")
+        print_error(f"Unexpected error reading CSV file: {e}")
         return None
 
 def import_from_csv():
-    while True:
+    max_attempts = 3
+    attempts = 0
+    
+    while attempts < max_attempts:
         try:
-            print_info("Enter CSV file path:")
+            attempts += 1
+            print_info(f"Enter CSV file path:")
             filepath = input().strip()
             
             if not filepath:
@@ -88,6 +151,10 @@ def import_from_csv():
                 print_error(f"File not found: {filepath}")
                 continue
                 
+            if not os.path.isfile(filepath):
+                print_error(f"Not a valid file: {filepath}")
+                continue
+                
             entries = parse_csv_file(filepath)
             if not entries:
                 print_error("Failed to parse CSV file. Please check the format and try again.")
@@ -96,5 +163,11 @@ def import_from_csv():
             print_success(f"Successfully loaded {len(entries)} entries from CSV.")
             return entries
             
+        except KeyboardInterrupt:
+            print_warning("\nCSV import cancelled by user.")
+            sys.exit(0)
         except Exception as e:
             print_error(f"Error: {e}")
+    
+    print_error(f"Failed after {max_attempts} attempts. Exiting.")
+    sys.exit(1)
