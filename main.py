@@ -15,6 +15,8 @@ from display import (
 )
 import sys
 import os
+import random
+import time
 
 def validate_date_range(year, month, start, end, current_date):
     if not 1 <= start <= 31:
@@ -321,6 +323,9 @@ def process_csv_input():
                         force_overwrite=force_overwrite
                     ):
                         success_count += 1
+
+                print("Waiting for 1-3 seconds before next submission...")
+                time.sleep(random.uniform(1, 3))
             
             print_info(f"Successfully submitted {success_count} out of {total_entries} entries")
             return success_count > 0
