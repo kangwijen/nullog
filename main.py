@@ -14,6 +14,7 @@ from display import (
     display_csv_entries, display_available_months
 )
 import sys
+import os
 
 def validate_date_range(year, month, start, end, current_date):
     if not 1 <= start <= 31:
@@ -158,15 +159,28 @@ def process_single_day(date, activity, clock_in, clock_out, description, existin
         
         try:
             if weekday == WEEKDAY_SATURDAY:
-                print_warning(f"Saturday detected - submitting as OFF day")
-                response = submit_logbook(
-                    date=date,
-                    activity="OFF",
-                    clock_in="OFF",
-                    clock_out="OFF",
-                    description="OFF",
-                    force=True if existing_entry else force_overwrite
-                )
+                saturday_submission = os.getenv("SATURDAY_SUBMISSION", "false").lower() == "true"
+                
+                if not saturday_submission:
+                    print_warning(f"Saturday detected - submitting as OFF day")
+                    response = submit_logbook(
+                        date=date,
+                        activity="OFF",
+                        clock_in="OFF",
+                        clock_out="OFF",
+                        description="OFF",
+                        force=True if existing_entry else force_overwrite
+                    )
+                else:
+                    print_warning(f"Saturday detected - submitting with provided values")
+                    response = submit_logbook(
+                        date=date,
+                        activity=activity,
+                        clock_in=clock_in,
+                        clock_out=clock_out,
+                        description=description,
+                        force=True if existing_entry else force_overwrite
+                    )
             else:
                 response = submit_logbook(
                     date=date,
@@ -210,12 +224,26 @@ def group_entries_by_month(csv_entries):
 
 def process_csv_input():
     try:
-        csv_entries = import_from_csv()
+        csv_entries, csv_errors = import_from_csv()
         if not csv_entries:
             print_error("No valid entries found in CSV. Exiting.")
             return False
         
         display_csv_entries(csv_entries)
+        
+        if csv_errors:
+            print_header("Validation Errors and Warnings")
+            for error in csv_errors:
+                if "Sunday entries" in error:
+                    print_warning(error)
+                else:
+                    print_error(error)
+            print()
+        
+        print_info("Do you want to continue with these entries? (y/n):")
+        if input().strip().lower() != 'y':
+            print_warning("Operation cancelled by user.")
+            return False
         
         try:
             months_data = get_logbook_months()

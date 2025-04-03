@@ -14,11 +14,3 @@ def get_credentials():
         password = getpass.getpass("Enter password: ")
     
     return username, password
-
-def get_logbook_defaults():
-    return {
-        "activity": os.getenv("DEFAULT_ACTIVITY", "Self Study"),
-        "clock_in": os.getenv("DEFAULT_CLOCK_IN", "09:00 am"),
-        "clock_out": os.getenv("DEFAULT_CLOCK_OUT", "06:00 pm"),
-        "description": os.getenv("DEFAULT_DESCRIPTION", "Self study activities")
-    }
