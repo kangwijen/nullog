@@ -17,6 +17,25 @@ import sys
 import os
 import random
 import time
+import requests
+
+__version__ = "1.3.0"
+LATEST_VERSION_URL = "https://raw.githubusercontent.com/kangwijen/nullog/main/VERSION"
+
+def check_for_update():
+    try:
+        response = requests.get(LATEST_VERSION_URL, timeout=3)
+        if response.status_code == 200:
+            latest_version = response.text.strip()
+            if latest_version != __version__:
+                print_warning(f"A new version ({latest_version}) is available. You are using {__version__}.")
+                print_warning("Please pull the latest version from GitHub.")
+            else:
+                print_success("You are using the latest version.")
+        else:
+            print_info("Could not check for updates (server returned error)")
+    except Exception:
+        print_info("Could not check for updates (network error)")
 
 def validate_date_range(year, month, start, end, current_date):
     if not 1 <= start <= 31:
@@ -341,6 +360,7 @@ def process_csv_input():
         return False
 
 def main():
+    check_for_update()
     try:
         print_header("nullog - Automated Logbook System")
         print_header("DISCLAIMER")

@@ -79,18 +79,34 @@ def display_csv_entries(entries):
 def display_available_months(completion_status):
     table_data = []
     prev_complete = True
-    
-    for month, status in sorted(completion_status.items()):
-        completion_indicator = "✓" if status['completed'] else "✗"
-        color = Fore.GREEN if status['completed'] else Fore.RED
-        
-        empty_status = f"{status['empty_entries']} unfilled" if status['empty_entries'] > 0 else "All filled"
-        submit_status = f"{status['submitted_entries']}/{status['filled_entries']} submitted"
-        
-        blocked = not prev_complete
-        availability = "Available" if prev_complete else "BLOCKED - Complete previous month first"
-        avail_color = Fore.GREEN if prev_complete else Fore.RED
-        
+    blocked = False
+
+    sorted_months = sorted(
+        completion_status.items(),
+        key=lambda x: (x[1]['year'], x[0])
+    )
+
+    for month, status in sorted_months:
+        if blocked or not prev_complete:
+            completion_indicator = "✗"
+            color = Fore.RED
+            empty_status = "Unfilled"
+            submit_status = "Unsubmitted"
+            availability = "BLOCKED - Complete previous month first"
+            avail_color = Fore.RED
+            blocked = True
+        else:
+            completion_indicator = "✓" if status['completed'] else "✗"
+            color = Fore.GREEN if status['completed'] else Fore.RED
+            empty_status = f"{status['empty_entries']} unfilled" if status['empty_entries'] > 0 else "All filled"
+            
+            submitted_count = status.get('filledSubmit', 0)
+            filled_total = status.get('filledAll', status.get('filled_entries', 0))
+            submit_status = f"{submitted_count}/{filled_total} submitted"
+            
+            availability = "Available"
+            avail_color = Fore.GREEN
+
         table_data.append([
             month,
             status['month_name'],
@@ -100,9 +116,9 @@ def display_available_months(completion_status):
             submit_status,
             f"{avail_color}{availability}{Style.RESET_ALL}"
         ])
-        
-        prev_complete = status['completed']
-    
+
+        prev_complete = status['completed'] and not blocked
+
     print_table(
         table_data,
         ["Month #", "Month", "Year", "Complete", "Fill Status", "Submit Status", "Availability"],

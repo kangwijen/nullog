@@ -126,12 +126,15 @@ def check_month_completion_status(months_data):
             filled_empty = entries_data.get("filledEmpty", 0)
             filled = entries_data.get("filled", 0)
             filled_submit = entries_data.get("filledSubmit", 0)
-            
+            filled_all = entries_data.get("filledAll", filled)
+            completed = filled_empty == 0
             completion_status[month] = {
-                'completed': filled_empty == 0 and filled > 0 and filled_submit == filled,
+                'completed': completed,
                 'empty_entries': filled_empty,
                 'filled_entries': filled,
                 'submitted_entries': filled_submit,
+                'filledSubmit': filled_submit,
+                'filledAll': filled_all,
                 'month_name': month_info['name'],
                 'year': month_info['year'],
                 'header_id': logbook_header_id
@@ -148,8 +151,8 @@ def is_month_available_for_submission(month, year, completion_status):
         prev_year -= 1
     
     if prev_month in completion_status:
-        if not completion_status[prev_month]['completed']:
-            return False, f"Previous month ({completion_status[prev_month]['month_name']} {prev_year}) has unfilled or unsubmitted entries."
+        if completion_status[prev_month]['empty_entries'] > 0:
+            return False, f"Previous month ({completion_status[prev_month]['month_name']} {prev_year}) has unfilled entries."
     
     if month not in completion_status:
         return False, f"Month {month} of {year} is not available in the logbook system."
@@ -220,16 +223,9 @@ def is_previous_month_completed(current_month, current_year):
     
     print_info(f"Previous month status: {filled_empty} unfilled, {filled} filled, {filled_submit} submitted")
     
-    month_completed = filled_empty == 0 and filled > 0 and filled_submit == filled
-    
-    if not month_completed and filled_empty > 0:
+    if filled_empty > 0:
         message = (f"Previous month ({previous_month}/{previous_year}) has {filled_empty} "
                   f"unfilled entries. Please complete them first.")
-        return False, message
-    
-    if not month_completed and filled_submit < filled:
-        message = (f"Previous month ({previous_month}/{previous_year}) has {filled - filled_submit} "
-                  f"entries that are filled but not submitted. Please submit them first.")
         return False, message
     
     return True, None
