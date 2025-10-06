@@ -2,21 +2,30 @@ import requests
 import json
 import sys
 from datetime import datetime
-from cookies import load_cookies, load_user_agent
-from login import login
-from config import get_credentials
-from utils import format_iso_date, convert_12hour, logger
-from constants import (
+from utils.cookies import load_cookies, load_user_agent
+from utils.login import login
+from utils.config import get_credentials
+from utils.utils import format_iso_date, convert_12hour, logger
+from utils.constants import (
     LOGBOOK_GET_MONTHS_URL, LOGBOOK_GET_LOGBOOK_URL, 
     LOGBOOK_STUDENT_SAVE_URL, REFERER_URL
 )
-from display import print_info, print_error, print_success, print_warning
+from utils.display import print_info, print_error, print_success, print_warning
 
 def prepare_request_params():
     try:
+        # Always perform a fresh login to ensure new cookies each run
+        username, password = get_credentials()
+        login_result = login(username=username, password=password)
+        if not login_result:
+            error_msg = "Failed to log in for fresh session."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # Load the freshly saved cookies and user agent
         cookies_data = load_cookies()
         if not cookies_data:
-            error_msg = "No cookies available. Please login first."
+            error_msg = "No cookies available after fresh login."
             logger.error(error_msg)
             raise ValueError(error_msg)
                 

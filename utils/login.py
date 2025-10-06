@@ -9,13 +9,14 @@ import time
 import getpass
 import sys
 from webdriver_manager.chrome import ChromeDriverManager
-from utils import save_data_securely, logger
-from constants import (
+from datetime import datetime, timezone
+from utils.utils import save_data_securely, logger
+from utils.constants import (
     LOGIN_URL, XPATH_MS_LOGIN_BTN, XPATH_EMAIL_INPUT, XPATH_NEXT_BUTTON,
     XPATH_PASSWORD_INPUT, XPATH_SIGN_IN_BUTTON, XPATH_ENRICHMENT_DASHBOARD,
     XPATH_INTERNSHIP_SECTION, XPATH_LOGBOOK_NAV
 )
-from display import print_info, print_error, print_success, print_warning
+from utils.display import print_info, print_error, print_success, print_warning
 
 def setup_driver():
     try:
@@ -225,8 +226,12 @@ def login(username=None, password=None):
         
         logger.info(f"Retrieved {len(cookies)} cookies")
         
-        # Save data securely
-        data_to_save = {"cookies": cookies, "user_agent": user_agent}
+        # Save data securely with freshness timestamp
+        data_to_save = {
+            "cookies": cookies,
+            "user_agent": user_agent,
+            "generated_at": datetime.now(timezone.utc).isoformat()
+        }
         if save_data_securely(data_to_save):
             logger.info("Login data saved securely")
             return cookies

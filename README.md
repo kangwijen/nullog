@@ -1,6 +1,6 @@
 # nullog
 
-An automated logbook system for Binus University students that securely manages and submits logbook entries.
+An automated logbook system that securely manages and submits logbook entries.
 
 ## 🚀 Features
 

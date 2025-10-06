@@ -1,15 +1,15 @@
-from cookies import load_cookies
-from login import login
-from api import (
+from utils.cookies import load_cookies
+from utils.login import login
+from utils.api import (
     submit_logbook, get_logbook_months, get_logbook_entries, get_entry_for_date,
     check_month_completion_status, is_month_available_for_submission
 )
-from config import get_credentials
+from utils.config import get_credentials
 from datetime import datetime
-from csv_parser import import_from_csv
-from utils import is_valid_time_format, logger
-from constants import WEEKDAY_SATURDAY, WEEKDAY_SUNDAY
-from display import (
+from utils.csv_parser import import_from_csv
+from utils.utils import is_valid_time_format, logger
+from utils.constants import WEEKDAY_SATURDAY, WEEKDAY_SUNDAY
+from utils.display import (
     print_success, print_error, print_warning, print_info, print_header, 
     display_csv_entries, display_available_months
 )
@@ -26,7 +26,6 @@ def _parse_version(version_str):
         parts = version_str.strip().split(".")
         return tuple(int(p) for p in parts)
     except Exception:
-        # Fallback: treat as 0.0.0 on parse failure
         return (0, 0, 0)
 
 def _load_local_version():
@@ -39,7 +38,6 @@ def _load_local_version():
                 parsed = _parse_version(file_version)
                 if parsed != (0, 0, 0):
                     return file_version
-        # Always read from file; treat missing/invalid as 0.0.0
         return "0.0.0"
     except Exception:
         return "0.0.0"
@@ -77,18 +75,9 @@ def check_for_update():
                 logger.info("Using latest version")
                 print_success("You are using the latest version.")
             else:
-                # Local version is newer than remote
                 logger.info("Local version is newer than remote VERSION")
                 print_success(f"You are ahead of the remote release (local {local_version} > remote {latest_version}).")
 
-            # If both endpoints returned versions and they differ, log and prefer the higher
-            if latest_primary:
-                primary_tuple = _parse_version(latest_primary)
-                preferred = latest_primary if primary_tuple >= current_tuple else local_version
-                logger.warning(
-                    f"VERSION mismatch between endpoints. Primary={latest_primary} ({LATEST_VERSION_URL_PRIMARY}), "
-                    f"Fallback={local_version} ({LATEST_VERSION_URL_PRIMARY}). Using {preferred}."
-                )
         else:
             logger.warning("Could not check for updates (all endpoints failed)")
             print_info("Could not check for updates (network or server error)")
@@ -613,26 +602,21 @@ def main():
         
         logger.info("User accepted disclaimer")
         
-        # Load or create session
+        # Always perform fresh login session
         try:
+            logger.info("Starting fresh login session")
+            print_info("Starting fresh login session...")
+            username, password = get_credentials()
+            login_result = login(username=username, password=password)
+            if not login_result:
+                logger.error("Login failed")
+                print_error("Failed to log in. Please try again.")
+                sys.exit(1)
             cookies = load_cookies()
             if not cookies:
-                logger.info("No saved session found, starting login process")
-                print_info("No saved session found. Logging in...")
-                username, password = get_credentials()
-                login_result = login(username=username, password=password)
-                if not login_result:
-                    logger.error("Login failed")
-                    print_error("Failed to log in. Please try again.")
-                    sys.exit(1)
-                cookies = load_cookies()
-                if not cookies:
-                    logger.error("Failed to save login session")
-                    print_error("Failed to save login session. Exiting.")
-                    sys.exit(1)
-            else:
-                logger.info("Using existing session")
-                print_success("Using existing cookies...")
+                logger.error("Failed to save login session")
+                print_error("Failed to save login session. Exiting.")
+                sys.exit(1)
         except Exception as e:
             logger.error(f"Error during session management: {str(e)}")
             print_error(f"Error during session management: {str(e)}")

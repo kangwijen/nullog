@@ -6,7 +6,7 @@ from datetime import datetime
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from constants import COOKIES_DIR, COOKIES_FILE, DEFAULT_USER_AGENT
+from utils.constants import COOKIES_DIR, COOKIES_FILE, DEFAULT_USER_AGENT
 
 # Configure logging
 def setup_logging(log_level=logging.INFO):
