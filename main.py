@@ -19,25 +19,79 @@ import random
 import time
 import requests
 
-__version__ = "2.0.0"
-LATEST_VERSION_URL = "https://raw.githubusercontent.com/kangwijen/nullog/main/VERSION"
+LATEST_VERSION_URL_PRIMARY = "https://raw.githubusercontent.com/kangwijen/nullog/refs/heads/main/VERSION"
+
+def _parse_version(version_str):
+    try:
+        parts = version_str.strip().split(".")
+        return tuple(int(p) for p in parts)
+    except Exception:
+        # Fallback: treat as 0.0.0 on parse failure
+        return (0, 0, 0)
+
+def _load_local_version():
+    try:
+        base_dir = os.path.dirname(__file__)
+        version_path = os.path.join(base_dir, "VERSION")
+        if os.path.exists(version_path):
+            with open(version_path, "r", encoding="utf-8") as f:
+                file_version = f.read().strip()
+                parsed = _parse_version(file_version)
+                if parsed != (0, 0, 0):
+                    return file_version
+        # Always read from file; treat missing/invalid as 0.0.0
+        return "0.0.0"
+    except Exception:
+        return "0.0.0"
+
+def _fetch_remote_version(url):
+    try:
+        response = requests.get(url, timeout=3)
+        if response.status_code == 200:
+            return response.text.strip()
+        logger.warning(f"Update check failed at {url} with status code: {response.status_code}")
+        return None
+    except requests.exceptions.Timeout:
+        logger.warning(f"Update check timed out for {url}")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Update check failed for {url}: {str(e)}")
+        return None
 
 def check_for_update():
     try:
         logger.info("Checking for software updates")
-        response = requests.get(LATEST_VERSION_URL, timeout=3)
-        if response.status_code == 200:
-            latest_version = response.text.strip()
-            if latest_version != __version__:
+        latest_primary = _fetch_remote_version(LATEST_VERSION_URL_PRIMARY)
+
+        latest_version = latest_primary
+        if latest_version:
+            latest_tuple = _parse_version(latest_version)
+            local_version = _load_local_version()
+            current_tuple = _parse_version(local_version)
+
+            if latest_tuple > current_tuple:
                 logger.info(f"New version available: {latest_version}")
-                print_warning(f"A new version ({latest_version}) is available. You are using {__version__}.")
+                print_warning(f"A new version ({latest_version}) is available. You are using {local_version}.")
                 print_warning("Please pull the latest version from GitHub.")
-            else:
+            elif latest_tuple == current_tuple:
                 logger.info("Using latest version")
                 print_success("You are using the latest version.")
+            else:
+                # Local version is newer than remote
+                logger.info("Local version is newer than remote VERSION")
+                print_success(f"You are ahead of the remote release (local {local_version} > remote {latest_version}).")
+
+            # If both endpoints returned versions and they differ, log and prefer the higher
+            if latest_primary:
+                primary_tuple = _parse_version(latest_primary)
+                preferred = latest_primary if primary_tuple >= current_tuple else local_version
+                logger.warning(
+                    f"VERSION mismatch between endpoints. Primary={latest_primary} ({LATEST_VERSION_URL_PRIMARY}), "
+                    f"Fallback={local_version} ({LATEST_VERSION_URL_PRIMARY}). Using {preferred}."
+                )
         else:
-            logger.warning(f"Update check failed with status code: {response.status_code}")
-            print_info("Could not check for updates (server returned error)")
+            logger.warning("Could not check for updates (all endpoints failed)")
+            print_info("Could not check for updates (network or server error)")
     except requests.exceptions.Timeout:
         logger.warning("Update check timed out")
         print_info("Could not check for updates (timeout)")
