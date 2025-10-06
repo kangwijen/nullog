@@ -14,7 +14,8 @@ from utils.utils import save_data_securely, logger
 from utils.constants import (
     LOGIN_URL, XPATH_MS_LOGIN_BTN, XPATH_EMAIL_INPUT, XPATH_NEXT_BUTTON,
     XPATH_PASSWORD_INPUT, XPATH_SIGN_IN_BUTTON, XPATH_ENRICHMENT_DASHBOARD,
-    XPATH_INTERNSHIP_SECTION, XPATH_LOGBOOK_NAV
+    XPATH_INTERNSHIP_SECTION, XPATH_LOGBOOK_NAV, XPATH_ODD_SEMESTER_DROPDOWN,
+    XPATH_ODD_SEMESTER_ITEM
 )
 from utils.display import print_info, print_error, print_success, print_warning
 
@@ -69,7 +70,7 @@ def wait_for_element(driver, xpath, timeout=10, clickable=False):
         logger.error(error_msg)
         raise
 
-def login(username=None, password=None):
+def login(username=None, password=None, is_odd_semester=None):
     driver = None
     try:
         logger.info("Starting login process")
@@ -168,6 +169,26 @@ def login(username=None, password=None):
             logger.info("No 'Stay signed in' prompt detected")
             print_info("No 'Stay signed in' prompt detected.")
         
+        # Optional: select odd semester if requested by caller (before navigating to Enrichment Dashboard)
+        if is_odd_semester is True:
+            logger.info("Odd semester flag set. Selecting odd semester from dropdown")
+            print_info("Selecting odd semester...")
+            try:
+                dropdown = wait_for_element(driver, XPATH_ODD_SEMESTER_DROPDOWN, clickable=True, timeout=15)
+                driver.execute_script("arguments[0].scrollIntoView(true);", dropdown)
+                time.sleep(1)
+                dropdown.click()
+                item = wait_for_element(driver, XPATH_ODD_SEMESTER_ITEM, clickable=True, timeout=15)
+                item.click()
+                logger.info("Odd semester selected. Waiting 7 seconds for page to update")
+                time.sleep(7)
+            except TimeoutException:
+                logger.warning("Odd semester dropdown or item not found")
+                print_warning("Odd semester selection controls not found.")
+            except Exception as e:
+                logger.warning(f"Error selecting odd semester: {str(e)}")
+                print_warning(f"Error selecting odd semester: {str(e)}")
+
         # Navigate to Enrichment Dashboard
         logger.info("Navigating to Enrichment Dashboard")
         print_info("Navigating to Enrichment Dashboard...")

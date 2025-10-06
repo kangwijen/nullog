@@ -370,8 +370,8 @@ def process_single_day(date, activity, clock_in, clock_out, description, existin
             return False
         finally:
             logger.info(f"Waiting before next submission...")
-            print("Waiting for 1-3 seconds before next submission...")
-            time.sleep(random.uniform(1, 3))
+            print("Waiting for 1-2 seconds before next submission...")
+            time.sleep(random.uniform(1, 2))
     except ValueError as e:
         logger.error(f"Invalid date format for {date}: {str(e)}")
         print_error(f"Invalid date format for {date}: {str(e)}")
@@ -602,12 +602,17 @@ def main():
         
         logger.info("User accepted disclaimer")
         
+        # Prompt for semester selection
+        print_info("Is this an odd semester? (y/n):")
+        odd_input = input().strip().lower()
+        is_odd_semester = odd_input == 'y'
+        
         # Always perform fresh login session
         try:
             logger.info("Starting fresh login session")
             print_info("Starting fresh login session...")
             username, password = get_credentials()
-            login_result = login(username=username, password=password)
+            login_result = login(username=username, password=password, is_odd_semester=is_odd_semester)
             if not login_result:
                 logger.error("Login failed")
                 print_error("Failed to log in. Please try again.")

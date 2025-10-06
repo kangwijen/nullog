@@ -17,6 +17,10 @@ XPATH_ENRICHMENT_DASHBOARD = '//*[@id="StudentTermDashboard"]/span[1]/a[2]'
 XPATH_INTERNSHIP_SECTION = '//*[@id="tilesHolder"]/div[1]/div/div[1]/div/div[2]/div[1]'
 XPATH_LOGBOOK_NAV = '//*[@id="main-content"]/div[1]/div/div/ul/li[2]'
 
+# Odd semester selection XPaths
+XPATH_ODD_SEMESTER_DROPDOWN = '//*[@id="user-content"]/div[3]/div'
+XPATH_ODD_SEMESTER_ITEM = '//*[@id="user-content"]/div[3]/div/div[2]/div[2]'
+
 DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
 
 WEEKDAY_SATURDAY = 5

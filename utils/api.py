@@ -14,20 +14,21 @@ from utils.display import print_info, print_error, print_success, print_warning
 
 def prepare_request_params():
     try:
-        # Always perform a fresh login to ensure new cookies each run
-        username, password = get_credentials()
-        login_result = login(username=username, password=password)
-        if not login_result:
-            error_msg = "Failed to log in for fresh session."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        # Load the freshly saved cookies and user agent
+        # Prefer using saved cookies; login only if unavailable/stale
         cookies_data = load_cookies()
         if not cookies_data:
-            error_msg = "No cookies available after fresh login."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+            logger.info("No valid saved cookies; performing login to refresh session")
+            username, password = get_credentials()
+            login_result = login(username=username, password=password)
+            if not login_result:
+                error_msg = "Failed to log in to refresh session."
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            cookies_data = load_cookies()
+            if not cookies_data:
+                error_msg = "No cookies available after login."
+                logger.error(error_msg)
+                raise ValueError(error_msg)
                 
         cookies = {cookie['name']: cookie['value'] for cookie in cookies_data}
         user_agent = load_user_agent()

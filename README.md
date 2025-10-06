@@ -90,6 +90,13 @@ An automated logbook system that securely manages and submits logbook entries.
 python main.py
 ```
 
+### What you'll be prompted for
+- Acceptance of the disclaimer
+- Whether it is an odd semester (y/n)
+  - If yes, the app selects the odd semester in the portal before proceeding
+- Microsoft login (email/password) if no valid session is found
+- CSV file path to import entries
+
 ### CSV Format
 Create a CSV file with the following columns:
 ```csv
@@ -104,25 +111,26 @@ date,activity,clock_in,clock_out,description
 - **Activity**: Any text or OFF
 - **Description**: Any text or OFF
 - **OFF Consistency**: When any field is OFF, all fields must be OFF
+- **Available Months**: The app validates that all months in your CSV exist in the portal’s month list. If any are missing (e.g., different semester/term), it lists them and aborts.
 
 ## 📁 Project Structure
 
 ```
 nullog/
-├── main.py              # Main application entry point
-├── api.py               # API interaction functions
-├── login.py             # Authentication and login handling
-├── csv_parser.py        # CSV parsing and validation
-├── utils.py             # Utility functions and secure storage
-├── cookies.py           # Cookie management
-├── config.py            # Configuration management
-├── constants.py         # Application constants
-├── display.py           # User interface and display functions
-├── requirements.txt     # Python dependencies
-├── test_improvements.py # Test suite for improvements
+├── main.py             # Main application entry point
+├── utils/              # Application modules
+│   ├── api.py          # API interaction functions
+│   ├── login.py        # Authentication and login handling
+│   ├── csv_parser.py   # CSV parsing and validation
+│   ├── utils.py        # Utility functions and secure storage
+│   ├── cookies.py      # Cookie management
+│   ├── config.py       # Configuration management
+│   ├── constants.py    # Application constants
+│   └── display.py      # User interface and display functions
+├── requirements.txt    # Python dependencies
 ├── README.md           # This file
-├── cookies/            # Encrypted session storage
-└── logs/               # Application logs
+├── VERSION             # Current release version
+└── sample_logbook.csv  # Example CSV
 ```
 
 ## 🔧 Configuration
@@ -131,6 +139,11 @@ nullog/
 - `USER_EMAIL_NLG`: Your email address
 - `USER_PASSWORD_NLG`: Your password
 - `SATURDAY_SUBMISSION`: Set to "true" to allow Saturday submissions
+
+### Sessions and Cookies
+- The app securely stores session cookies and user agent (encrypted) and reuses them for API calls.
+- If cookies are missing or stale, it automatically logs in again and refreshes the session.
+- You’ll still be asked to choose odd semester at the start so the correct term is selected during login.
 
 ## ⚠️ Disclaimer
 
